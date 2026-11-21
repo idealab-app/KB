@@ -759,7 +759,7 @@ function render(){
 /* ---------- Sheets ---------- */
 let openSheet=null;
 function show(id){openSheet=$(id);$("scrim").classList.add("show");openSheet.classList.add("show");}
-function hide(){try{if(listening)stopListen();}catch(e){}if(openSheet)openSheet.classList.remove("show");$("scrim").classList.remove("show");openSheet=null;}
+function hide(){try{hardStop();}catch(e){}if(openSheet)openSheet.classList.remove("show");$("scrim").classList.remove("show");openSheet=null;}
 $("scrim").onclick=hide;document.querySelectorAll("[data-close]").forEach(b=>b.onclick=hide);
 
 let selEnv=null, selBy=me;
@@ -777,7 +777,7 @@ document.querySelectorAll("#fBy button").forEach(b=>b.onclick=()=>{selBy=b.datas
 
 function todayInMonth(){const n=new Date();if(mKey(n)===mKey(cur))return mKey(n)+"-"+String(n.getDate()).padStart(2,"0");return mKey(cur)+"-01";}
 function openTx(t,dict){
-  stopListen&&typeof stopListen==="function"&&listening&&stopListen();
+  if(typeof hardStop==="function")hardStop();
   $("fQuick").value="";$("heard").textContent="";
   if(!cfgLoaded)return;
   editId=t?t.id:null;
@@ -885,11 +885,15 @@ $("fQuick").addEventListener("input",()=>{clearTimeout(qT);qT=setTimeout(()=>app
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 let rec=null,listening=false,dictNS=null,dictBound=false,quickBase="",dictStopT=null;
 function setMic(on){listening=on;$("micBtn").classList.toggle("on",on);}
-function stopListen(){
-  clearTimeout(dictStopT);
-  if(dictNS){try{dictNS.stop().catch(()=>{});}catch(e){}setMic(false);return;}
-  setMic(false);try{rec&&rec.stop();}catch(e){}
+let srWatch=null,srGen=0;
+/* Beendet jede laufende Aufnahme restlos und setzt den Zustand zurück (verhindert „hängendes“ Mikrofon) */
+function hardStop(){
+  clearTimeout(dictStopT);clearTimeout(srWatch);srGen++;
+  if(dictNS){try{dictNS.stop().catch(()=>{});}catch(e){}}
+  if(rec){const r=rec;rec=null;r.onresult=r.onerror=r.onend=null;try{r.abort();}catch(e){try{r.stop();}catch(e2){}}}
+  setMic(false);
 }
+function stopListen(){hardStop();}
 function bindDict(){
   if(dictBound||!dictNS)return;dictBound=true;
   dictNS.onPartial(({text})=>{if(!text)return;clearTimeout(dictStopT);const v=(quickBase+text).trim();$("fQuick").value=v;applyQuick(v,false);});
@@ -902,8 +906,9 @@ function bindDict(){
       else if(reason==="upstream_error"||reason==="rate_limited")$("heard").textContent="Diktieren ging gerade nicht – bitte nochmal versuchen.";
     }});
 }
-function startListen(){
-  if(listening){stopListen();return;}
+function startListen(force){
+  if(listening&&force!==true){hardStop();return;}
+  hardStop();
   if(dictNS){
     bindDict();quickBase="";
     dictNS.start({language:"de"}).catch(e=>{const c=e&&e.code;setMic(false);
@@ -913,15 +918,21 @@ function startListen(){
   }
   if(!SR){$("fQuick").focus();$("heard").textContent="Tippe auf das Mikrofon deiner Tastatur und sprich, z. B. „23,40 Euro Lidl“.";return;}
   try{
-    rec=new SR();rec.lang="de-DE";rec.interimResults=true;rec.continuous=false;rec.maxAlternatives=1;
-    rec.onresult=ev=>{let txt="",fin=false;for(let i=0;i<ev.results.length;i++){txt+=ev.results[i][0].transcript;if(ev.results[i].isFinal)fin=true;}$("fQuick").value=txt;applyQuick(txt,fin);};
-    rec.onerror=ev=>{setMic(false);$("heard").textContent=ev.error==="not-allowed"||ev.error==="service-not-allowed"?"Mikrofon nicht erlaubt – bitte in den Browser-Einstellungen freigeben oder das Mikrofon der Tastatur nutzen.":(ev.error==="no-speech"?"Nichts gehört – nochmal auf das Mikrofon tippen.":"Diktieren ging nicht – nutze das Mikrofon der Tastatur.");};
-    rec.onend=()=>setMic(false);
-    rec.start();setMic(true);$("heard").textContent="Ich höre zu …";
-  }catch(e){setMic(false);$("fQuick").focus();}
+    const gen=++srGen;const r=new SR();rec=r;r.lang="de-DE";r.interimResults=true;r.continuous=false;r.maxAlternatives=1;
+    const done=()=>{if(gen!==srGen)return;clearTimeout(srWatch);rec=null;setMic(false);};
+    /* Sicherheitsnetz: nach 20 s ohne Ergebnis automatisch freigeben */
+    srWatch=setTimeout(()=>{if(gen===srGen){try{r.abort();}catch(e){}done();}},20000);
+    r.onresult=ev=>{if(gen!==srGen)return;let txt="",fin=false;for(let i=0;i<ev.results.length;i++){txt+=ev.results[i][0].transcript;if(ev.results[i].isFinal)fin=true;}$("fQuick").value=txt;applyQuick(txt,fin);
+      if(fin){clearTimeout(srWatch);setTimeout(()=>{try{r.stop();}catch(e){}},50);setTimeout(done,1200);}};
+    r.onerror=ev=>{if(gen!==srGen)return;done();if(ev.error==="aborted")return;$("heard").textContent=ev.error==="not-allowed"||ev.error==="service-not-allowed"?"Mikrofon nicht erlaubt – bitte in den Browser-Einstellungen freigeben oder das Mikrofon der Tastatur nutzen.":(ev.error==="no-speech"?"Nichts gehört – nochmal auf das Mikrofon tippen.":"Diktieren ging nicht – nutze das Mikrofon der Tastatur.");};
+    r.onend=done;
+    r.start();setMic(true);$("heard").textContent="Ich höre zu …";
+  }catch(e){hardStop();$("fQuick").focus();$("heard").textContent="Diktieren ging nicht – bitte nochmal tippen.";}
 }
 $("micBtn").onclick=startListen;
-$("dictBtn").onclick=()=>{openTx(null,true);startListen();};
+$("dictBtn").onclick=()=>{openTx(null,true);setTimeout(()=>startListen(true),150);};
+document.addEventListener("visibilitychange",()=>{if(document.hidden)hardStop();});
+window.addEventListener("pagehide",hardStop);
 
 $("saveTx").onclick=async()=>{
   const a=num($("fAmount").value);
