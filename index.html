@@ -648,8 +648,10 @@ function render(){
 
   // Hero
   const h=$("hero");h.replaceChildren();
-  h.append(el("div","lab",view==="gemeinsam"?"Noch in den gemeinsamen Umschlägen":"Noch in deinen Umschlägen"));
-  h.append(el("div","big"+(remaining<0?" neg":""),f(remaining)));
+  const pBudget=view==="gemeinsam"?0:+((cfg&&cfg.personal&&cfg.personal[view])||0);
+  const heroRest=view==="gemeinsam"?remaining:pBudget-envSpent;
+  h.append(el("div","lab",view==="gemeinsam"?"Noch in den gemeinsamen Umschlägen":"Noch von deinem persönlichen Budget"));
+  h.append(el("div","big"+(heroRest<0?" neg":""),f(heroRest)));
   const k=el("div","kpis");
   let unassigned;
   if(view==="gemeinsam"){
@@ -765,7 +767,9 @@ $("scrim").onclick=hide;document.querySelectorAll("[data-close]").forEach(b=>b.o
 let selEnv=null, selBy=me;
 function drawEnvChips(){
   const box=$("fEnv");box.replaceChildren();
-  const groups=view==="gemeinsam"?[["gemeinsam","Gemeinsam"],[me,"Persönlich "+me]]:[[view,"Persönlich "+view],["gemeinsam","Gemeinsam"]];
+  const isP=view==="N"||view==="M";
+  /* In den Reitern N / M wird nur aus dem persönlichen Budget gebucht – gemeinsame Ausgaben gehören in den Reiter „Gemeinsam“ */
+  const groups=view==="gemeinsam"?[["gemeinsam","Gemeinsam"],[me,"Persönlich "+me]]:(isP&&envsFor(view).length?[[view,"Persönlich "+view]]:[[view,"Persönlich "+view],["gemeinsam","Gemeinsam"]]);
   groups.forEach(([sc,lab])=>{
     const es=envsFor(sc);if(!es.length)return;
     box.append(el("div","grp",lab));
@@ -847,7 +851,8 @@ function parseUtterance(raw){
   let rest=t.replace(/€/g," ").replace(FILLER," ").replace(/[^\wÄÖÜäöüß&'\- ]/g," ").replace(/\s+/g," ").trim();
   if(rest)res.merchant=rest.split(" ").map(w=>w.length>2&&w===w.toLowerCase()?w[0].toUpperCase()+w.slice(1):w).join(" ").slice(0,60);
   // Umschlag vorschlagen
-  const scopes=res.personal?[res.by||me,"gemeinsam"]:(view!=="gemeinsam"&&view!=="sparen"?[view,"gemeinsam"]:["gemeinsam",res.by||me]);
+  const onlyP=(view==="N"||view==="M")&&envsFor(view).length>0;
+  const scopes=onlyP?[view]:res.personal?[res.by||me,"gemeinsam"]:(view!=="gemeinsam"&&view!=="sparen"?[view,"gemeinsam"]:["gemeinsam",res.by||me]);
   const pool=scopes.flatMap(sc=>envsFor(sc));
   if(res.merchant){
     const key=res.merchant.toLowerCase(),cnt={};
@@ -860,6 +865,7 @@ function parseUtterance(raw){
       if(txtRe.test(raw)||txtRe.test(res.merchant||"")){const e=pool.find(e=>envRe.test(e.name));if(e){res.env=e.id;break;}}
     }
   }
+  if(!res.env&&onlyP){const e=envsFor(view)[0];if(e)res.env=e.id;}
   if(!res.env&&res.personal){const e=envsFor(res.by||me)[0];if(e)res.env=e.id;}
   return res;
 }
