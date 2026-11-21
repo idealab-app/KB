@@ -37,6 +37,11 @@ Jeder Euro bekommt eine Aufgabe: Einnahmen minus Fixkosten, Sparraten und persö
 - **Gesamtwertung:** Siege, Punkte und gewonnene Beträge aller abgeschlossenen Monate
 - **Vergangene Runden:** Gewinner und Betrag je Monat, mit Häkchen „ausgezahlt“, sobald das Geld überwiesen ist
 
+### ⬇ Export als Excel
+- **„⬇ Excel“** bei den Buchungen lädt den angezeigten Monat herunter; unter ⚙︎ → *Export als Excel* gibt es **Dieser Monat** und **Alle Daten**
+- Die Datei (`.xlsx`) enthält fünf Blätter: **Buchungen**, **Umschläge** (Budget/Ausgegeben/Rest je Monat), **Monatsplan**, **Sparduell** und **Einstellungen**; Beträge als Zahlen im €-Format
+- Die Datei wird direkt im Browser erzeugt – ohne fremde Bibliothek und ohne dass Daten an einen weiteren Dienst gehen
+
 ### Einnahmen & Monatsplan
 - **Einnahmen** pro Monat überschreibbar (z. B. schwankendes Gehalt), ohne den Standardwert zu ändern
 - **Monatsplan:** Einnahmen → Fixkosten → Sparen & Rücklagen → persönliche Budgets → Haushaltsbudget für Umschläge
